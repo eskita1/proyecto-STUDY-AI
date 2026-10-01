@@ -1,31 +1,31 @@
 # Roadmap
 
-Este roadmap describe una dirección tentativa. Las versiones pueden ajustarse a medida que se aprenda del uso del producto, sin adelantar decisiones de implementación.
+This roadmap describes a tentative direction. Versions may be adjusted as the team learns from product usage, without anticipating implementation decisions.
 
 ## V0.1 — Academic Core
 
-Establecer la estructura académica básica: estudiante, materias, unidades y temas.
+Establish the basic academic structure: User, University, Faculty, Career, StudyPlan, StudyPlanCourse, Course, UserCareer, UserCourse, CourseStatus, and final_grade.
 
 ## V0.2 — Progress Engine
 
-Incorporar el estado de los temas y las primeras métricas de progreso y ritmo de cursada, manteniéndolas diferenciadas.
+Add topic state and the first Progress and CoursePace metrics while keeping them distinct.
 
 ## V0.3 — Academic Content
 
-Permitir trabajar con programas, documentos, guías y ejercicios como contenido académico asociado a las materias.
+Support syllabi, documents, guides, and exercises as academic content associated with Courses.
 
 ## V0.4 — Practice Engine
 
-Registrar intentos de ejercicios, dificultad y desempeño para empezar a representar el dominio de los temas.
+Track exercise attempts, difficulty, and performance to begin representing topic Mastery.
 
 ## V0.5 — AI Layer
 
-Usar IA como ayuda para interpretar documentos, clasificar contenido y generar variantes de ejercicios. La IA no calculará por sí sola métricas académicas críticas.
+Use AI to help interpret documents, classify content, and generate exercise variants. AI will not calculate critical academic metrics on its own.
 
 ## V0.6 — Study Intelligence
 
-Ofrecer recomendaciones y prioridades de estudio, apoyo para preparar parciales y planificación basada en la información académica disponible.
+Provide study recommendations and priorities, support Assessment preparation, and offer planning based on the available academic information.
 
-## V1.0 — Primera versión para otros estudiantes
+## V1.0 — First version for other students
 
-Consolidar una primera experiencia utilizable por otros estudiantes, validando que StudyAI ayude a comprender el recorrido académico y orientar el estudio.
+Consolidate an initial experience usable by other students, validating that StudyAI helps Users understand their academic journey and guides their study.
