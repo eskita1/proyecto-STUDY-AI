@@ -16,18 +16,16 @@ Implement only what the current task and current release require.
 
 ## 2. Context routing
 
-For implementation tasks, read:
+For every implementation task:
+- read `AGENTS.md`;
+- read `docs/releases/v0.1.md`.
 
-1. `AGENTS.md`
-2. `docs/releases/v0.1.md`
-
-Load additional context only when relevant:
-
-- Product intent, behavior, or user experience: `docs/product.md`
-- Domain entities, relationships, terminology, or invariants: `docs/domain.md`
-- Backend structure, layers, persistence, or dependencies: `docs/architecture.md`
-- Release sequencing or future placement: `docs/roadmap.md`
-- Existing product or technical decisions: the relevant file under `docs/decisions/`
+Read additionally only when relevant:
+- product behavior -> `docs/product.md`
+- domain rules -> `docs/domain.md`
+- backend architecture -> `docs/architecture.md`
+- future release placement -> `docs/roadmap.md`
+- architectural decisions -> relevant files in `docs/decisions/`
 
 If source-of-truth documents conflict, do not guess. Report the conflict and identify the affected files.
 
@@ -74,7 +72,7 @@ Database work must use SQLAlchemy and Alembic.
 - Do not invent or silently change domain semantics.
 - Read `docs/domain.md` before changing entities, relationships, ownership, state, or invariants.
 - Preserve documented distinctions and business rules.
-- Do not make undocumented product, domain, architecture, persistence, or API decisions.
+- - Do not make undocumented product, domain, architecture, persistence, API, or release-scope decisions.
 - When a required decision is undefined, stop at that boundary and report the exact decision needed.
 - Preserve completed work that does not depend on the unresolved decision.
 
