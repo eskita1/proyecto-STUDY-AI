@@ -1,84 +1,153 @@
-# Product
+# StudyAI Product
 
 ## Product vision
 
-StudyAI is an academic companion that brings together a person's academic structure, context, and study journey to help them understand where they are and what they should do next. Progress is central to the experience and must be visible in the main hub.
+StudyAI helps university students understand the academic structure they share with their classmates, track their own progress and study activity, and organize practice and upcoming assessments without surrendering control of their academic state.
 
 ## Target user
 
-University students taking one or more Courses who need to organize their academic journey, track their progress, and decide what to study or practice.
+The initial product is for university students enrolled in one or more concrete course offerings who need a reliable view of:
+
+- what their course is expected to cover;
+- what the course has actually covered;
+- what they personally consider studied;
+- what they have practiced;
+- when they studied;
+- which assessments are approaching.
 
 ## Core problem
 
-Academic information is often scattered across the StudyPlan, syllabi, guides, notes, exercises, Assessment dates, and other tools. This fragmentation makes it difficult to know what content has been covered, how the Course is advancing, what has been mastered, and what needs attention.
+Academic information is distributed across study plans, syllabi, schedules, theoretical material, practice material, and other documents. Students then maintain separate personal notes about what they have seen, studied, and practiced.
+
+StudyAI brings those two kinds of information together while preserving the distinction between shared academic structure and each student's personal state.
 
 ## Value proposition
 
-StudyAI turns scattered academic context into an understandable view of the User's journey and concrete study guidance. It brings together Courses, topics, materials, Practice, dates, and distinct metrics without taking control of academic state away from the User.
+StudyAI provides a source-backed academic structure for each concrete course offering and lets each student maintain an independent record of progress, study sessions, and practice.
 
-## Main user questions
+The product must make every important state understandable and user-controlled. It must not infer that a topic was covered merely because it was scheduled, infer that a student studied merely because a session was recorded, or treat practice as proof of progress or mastery.
 
-- Which Courses and topics am I taking?
-- How much content have I covered, and how is my Progress going?
-- Am I on pace, ahead, or behind in the Course?
-- What have I practiced, and how well have I mastered each topic?
-- Which Assessments or academic deadlines are approaching?
-- What should I study or practice next?
+## Product model
 
-## Core product concepts
+### Institutional structure
 
-- **Career:** the User's overall academic journey.
-- **StudyPlan:** the organization of the Courses that make up that journey.
-- **Course:** an academic space taken by the User, organized into units and topics.
-- **Topics:** concrete parts of the content that can be covered, studied, and practiced.
-- **Progress:** how much content the User has completed or covered. It is central and visible in the main hub.
-- **CoursePace:** the User's position relative to the current advancement of a Course; it indicates whether the User is on pace, ahead, or behind.
-- **Practice:** activities and attempts completed to work on a topic, including tracked exercises.
-- **Mastery:** how well the User understands or can apply a studied or practiced topic.
-- **Assessments and academic deadlines:** milestones that provide time context for setting priorities.
-- **Academic materials:** syllabi, documents, guides, notes, and other resources associated with Courses and topics.
-- **Study recommendations:** guidance on what to study or practice next based on the available academic context.
+The institutional hierarchy is:
 
-Progress, Practice, Mastery, and CoursePace answer different questions and must not be used as synonyms. A User may have covered little content, be on pace with the Course, have practiced a topic extensively, and still not have mastered it.
+```text
+University -> Faculty -> Career -> StudyPlan -> StudyPlanCourse
+```
 
-## Role of AI
+`Course` is an abstract course concept. `StudyPlanCourse` represents that Course in one specific StudyPlan.
 
-AI assists the User in interpreting materials, understanding content, working with exercises, and receiving study recommendations. It may propose and explain, but it is not the source of academic truth: it must not silently redefine Progress, Practice, Mastery, CoursePace, or other User states. Relevant changes must be understandable and verifiable.
+### Concrete academic delivery
 
-## User experience principles
+The structure used by students begins with a concrete delivery:
 
-- Show Progress clearly and centrally in the main hub.
-- Make academic state understandable without requiring the User to reconstruct scattered information.
-- Keep the differences between covered content, CoursePace, Practice, and Mastery visible.
-- Provide concrete and explainable recommendations.
-- Keep the User in control of their information and changes to their academic state.
-- Reduce organizational overhead without hiding the context behind each result.
+```text
+StudyPlanCourse -> CourseOffering -> Unit -> Topic -> Subtopic
+```
 
-## What StudyAI is not
+A `CourseOffering` identifies a specific chair or section in a specific academic period or year. Students share Units, Topics, Subtopics, schedules, and assessments only when they belong to the same CourseOffering.
 
-StudyAI is not a Notion clone, note-taking application, generic calendar, generic task manager, or generic chatbot. It also does not seek to replace teachers, institutions, or academic management platforms.
+### Source-backed structure
+
+Students do not freely create or edit Units, Topics, or Subtopics. The academic structure comes from materials supplied by the User, chair, or University.
+
+StudyAI may use AI to extract and propose structure, but the confirmed academic domain is reached only through this flow:
+
+```text
+source -> extraction -> proposed structure -> validation -> confirmed domain
+```
+
+AI must never write directly into the confirmed academic domain. It must not invent Subtopics from general model knowledge.
+
+### Personal academic history
+
+The User's personal relationships are:
+
+```text
+User -> UserCareer
+User -> UserCourse -> CourseEnrollment -> EnrollmentTopic
+```
+
+`UserCourse` is the historical relationship between the User and a StudyPlanCourse. `CourseEnrollment` is one concrete attempt in a CourseOffering. `EnrollmentTopic` stores the User's own state for a Topic during that attempt.
+
+## User-controlled progress
+
+Two independent Topic states are visible to the User:
+
+- actual course progress: whether the Topic has been seen in the CourseOffering;
+- personal study state: whether the User has not started, is studying, or considers the Topic studied.
+
+The User manually controls both states. StudyAI must not automatically change personal study state.
+
+The User may move freely between personal study states, including backwards. `STUDIED` means only that the User considers the Topic studied; it does not imply practice or mastery.
+
+Scheduled dates are plans and do not automatically mean that a Topic was seen. If confirmed academic content is later marked as removed, the User's existing personal state remains available.
+
+## Study activity
+
+Students can record StudySessions against a CourseEnrollment and associate them with one or more Topics.
+
+Study sessions support:
+
+- quick mode, with a start time and no end time;
+- full mode, with both start and end times.
+
+Recording a StudySession does not automatically change any Topic's personal study state. The most recent study time is derived from recorded sessions rather than stored as separate mutable state.
+
+## Practice
+
+Practice is recorded independently from course progress and personal study state.
+
+Students can use:
+
+- quick mode, with aggregate counts for total, correct, partially correct, and incorrect exercises;
+- detailed mode, with individual PracticeExercises and their results.
+
+Recording practice must not automatically change personal study state. Mastery is a separate concept and is not part of V0.1.
+
+## Time and assessments
+
+CourseScheduleItems express the planned timing and order of Units or Topics for a CourseOffering. A scheduled date represents a plan, not confirmation that the content was covered.
+
+Assessments belong to a CourseOffering and may be associated with Topics. V0.1 supports midterms, finals, recovery assessments, assignments, quizzes, and other assessment types.
+
+## Progress metrics
+
+V0.1 presents metrics derived from confirmed academic structure and User-controlled state:
+
+- course progress: seen active Topics divided by all active Topics;
+- student progress: studied active Topics divided by all active Topics;
+- catch-up progress: Topics that are both seen and studied divided by all seen Topics.
+
+These metrics are derived views, not independently editable sources of truth.
 
 ## Product principles
 
-- Prioritize clarity over automation.
-- Treat Progress, Practice, Mastery, and CoursePace as independent concepts.
-- Base critical academic metrics on explicit rules and data so they can be explained, reviewed, and corrected.
-- Keep academic metrics and state understandable and verifiable.
-- Use AI as assistance, not as a source of truth.
-- Integrate academic structure, materials, dates, and study activity around the User's journey.
-- Avoid complexity that does not provide direct academic value.
+- Preserve the distinction between institutional structure, a concrete CourseOffering, and personal student state.
+- Share academic structure only among students in the same CourseOffering.
+- Require source-backed, validated academic structure.
+- Use AI to propose, never to silently confirm academic truth.
+- Keep actual course progress, personal study state, Study, Practice, and Mastery separate.
+- Keep the User in control of actual course progress and personal study state.
+- Treat schedules as plans rather than evidence of completed events.
+- Preserve historical and personal state when confirmed content is removed.
+- Derive metrics from authoritative records instead of duplicating mutable state.
 
-## Long-term capabilities
+## V0.1 boundaries
 
-- Deepen planning and recommendations based on complete academic context.
-- Expand work with materials and exercises, including tracking attempts and performance.
-- Help prepare for Assessments by considering topics, Practice, Mastery, and academic deadlines.
-- Add a community dimension for reading and contributing opinions about Courses. This capability is not part of the initial product core.
+V0.1 includes institutional structure, CourseOfferings, source-backed academic structure, personal enrollment and Topic state, StudySessions, PracticeSessions, schedules, assessments, and derived progress metrics.
 
-## General success criteria
+V0.1 does not include:
 
-- The User can quickly understand their academic situation from the main hub.
-- The User can distinguish how much they have advanced, how they compare with CoursePace, what they have practiced, and what they have mastered.
-- The User can identify upcoming Assessments and study priorities.
-- Recommendations are useful, explainable, and consistent with the available information.
-- AI assistance saves effort without removing control or silently changing academic state.
+- automatic changes to personal study state;
+- AI writes directly to confirmed academic structure;
+- AI-generated Subtopics based on general model knowledge;
+- `RETAKING` or `DROPPED` enrollment states;
+- Mastery;
+- treating scheduled content as automatically seen.
+
+## Success criteria
+
+StudyAI V0.1 succeeds when a student can identify their concrete CourseOffering, inspect a validated source-backed structure, manually represent both course and personal progress, record study and practice without hidden state changes, view planned content and assessments, and understand how every displayed progress metric was derived.

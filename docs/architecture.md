@@ -137,7 +137,7 @@ The `services` layer contains application and business logic.
 
 It applies domain rules, validates invariants, coordinates repositories, decides whether operations are allowed, runs multi-entity flows, and keeps logic independent from HTTP.
 
-Examples include allowing `final_grade` only for a UserCourse with an `approved` CourseStatus, disallowing personal academic activity for a UserCourse with a `future` CourseStatus, disallowing a grade for a future Assessment, and requiring a Faculty to belong to a valid University.
+Examples include validating CourseEnrollment state, preserving EnrollmentTopic state when a Topic is removed, preventing schedules or activity records from changing Topic state automatically, enforcing the AcademicSource confirmation flow, and requiring a Faculty to belong to a valid University.
 
 Services must not return HTTP-specific objects, choose HTTP status codes, contain SQL, or know unnecessary web-framework details.
 
@@ -158,7 +158,7 @@ The `repositories` layer encapsulates data access: queries, record creation, upd
 Repositories must not contain business rules, decide academic validity, know HTTP, return HTTP status codes, or make product decisions.
 
 ```text
-UserCourseRepository
+CourseEnrollmentRepository
     ↓
 SQLAlchemy query
     ↓
@@ -177,11 +177,68 @@ It must not contain business logic, endpoints, domain decisions, or product vali
 
 ## 9. Models
 
-`models` represent persistent structures through SQLAlchemy. Initial examples are User, University, Faculty, Career, StudyPlan, Course, StudyPlanCourse, UserCareer, and UserCourse.
+`models` represent persistent structures through SQLAlchemy. V0.1 persistence includes the institutional, enrollment, academic-structure, scheduling, assessment, Study, and Practice concepts defined by the current release.
 
 A model represents persistence and must not be confused with an input schema, response schema, business logic, or view model.
 
 Models may represent columns, relationships, structural constraints, keys, and foreign keys. Complex business rules must not depend exclusively on database constraints.
+
+### V0.1 domain shape
+
+The institutional structure is:
+
+```text
+University -> Faculty -> Career -> StudyPlan -> StudyPlanCourse
+                                         Course -> StudyPlanCourse
+```
+
+`Course` is the abstract concept. `StudyPlanCourse` represents that Course in one StudyPlan.
+
+Concrete academic delivery is:
+
+```text
+StudyPlanCourse -> CourseOffering -> Unit -> Topic -> Subtopic
+```
+
+`CourseOffering` identifies a specific chair or section and academic year or term. Academic structure is shared only within the same CourseOffering.
+
+The User's academic history and tracking are:
+
+```text
+User -> UserCareer
+User -> UserCourse -> CourseEnrollment -> EnrollmentTopic
+```
+
+`UserCourse` is the historical relationship between a User and a StudyPlanCourse. It does not own enrollment status or `final_grade`.
+
+`CourseEnrollment` represents one concrete attempt or enrollment in a CourseOffering. It owns:
+
+- `status`;
+- `final_grade`.
+
+V0.1 CourseEnrollment statuses are:
+
+- `IN_PROGRESS`;
+- `PASSED`;
+- `FAILED`.
+
+`EnrollmentTopic` owns the User's Topic-specific fields for one CourseEnrollment:
+
+- `course_progress_status`, with `NOT_SEEN` or `SEEN`;
+- `student_status`, with `NOT_STARTED`, `IN_PROGRESS`, or `STUDIED`;
+- `personal_note`.
+
+`STUDIED` means the User considers the Topic studied. It does not imply Practice or Mastery.
+
+Additional V0.1 persistence concepts are:
+
+- `AcademicSource`;
+- `CourseScheduleItem`;
+- `Assessment` and `AssessmentTopic`;
+- `StudySession` and `StudySessionTopic`;
+- `PracticeSession`, `PracticeSessionTopic`, and `PracticeExercise`.
+
+The release and domain documents remain authoritative for their fields and invariants. This architecture document does not add persistence semantics beyond them.
 
 ---
 
@@ -250,9 +307,42 @@ models → routes
 Invariants from `domain.md` must be applied primarily in services and checked before persistence.
 
 ```text
-UserCourse.status == approved → final_grade allowed
-UserCourse.status == future → no personal Assessment grades
+UserCourse → historical User and StudyPlanCourse relationship
+CourseEnrollment → concrete attempt in a CourseOffering
+CourseEnrollment.status ∈ {IN_PROGRESS, PASSED, FAILED}
+EnrollmentTopic.student_status ∈ {NOT_STARTED, IN_PROGRESS, STUDIED}
 ```
+
+Services must preserve these boundaries:
+
+- `status` and `final_grade` belong to CourseEnrollment, not UserCourse;
+- the User controls `course_progress_status` and `student_status`;
+- the User may move between student states in either direction;
+- creating a StudySession or PracticeSession must not change `student_status`;
+- a CourseScheduleItem must not automatically mark a Topic as `SEEN`;
+- removing a Topic must preserve existing EnrollmentTopic state;
+- Progress, Practice, and Mastery are separate concepts.
+
+Confirmed academic structure must follow:
+
+```text
+source -> extraction -> proposed structure -> validation -> confirmed domain
+```
+
+An AcademicSource type is one of:
+
+- `STUDY_PLAN`;
+- `SYLLABUS`;
+- `SCHEDULE`;
+- `THEORETICAL_MATERIAL`;
+- `PRACTICE_MATERIAL`;
+- `OTHER`.
+
+`OTHER` may have a StudyPlan or CourseOffering owner, but in V0.1 it is
+informational only. It has no confirmation mapping into either confirmed
+structure and cannot mutate the domain through an ExtractionProposal.
+
+AI may assist with extraction and proposals, but it must not write directly to the confirmed academic domain. Routes and repositories must not provide a bypass around service-level validation for confirmed Units, Topics, or Subtopics.
 
 The database may reinforce invariants with constraints when reasonable, but must not be the only place where important domain logic is expressed.
 
@@ -260,7 +350,7 @@ The database may reinforce invariants with constraints when reasonable, but must
 
 ## 14. Errors
 
-Repositories may detect technical failures such as missing records, constraint violations, or persistence conflicts. Services interpret the problem in domain terms, such as `Course not found` or `final_grade is not allowed for a UserCourse with an active CourseStatus`. Routes transform those results into appropriate responses such as 404, 409, or 422.
+Repositories may detect technical failures such as missing records, constraint violations, or persistence conflicts. Services interpret the problem in domain terms, such as `CourseOffering not found`, `Topic does not belong to this CourseOffering`, or `confirmed academic structure requires validation`. Routes transform those results into appropriate responses such as 404, 409, or 422.
 
 Do not use `HTTPException` in repositories, and ideally not in services when that would couple logic too tightly to FastAPI.
 
@@ -304,13 +394,19 @@ Tests may progressively be divided into `tests/unit/` and `tests/integration/`, 
 
 Important invariants must have explicit tests. Current applicable examples include:
 
-```text
-UserCourse.status == approved + final_grade → valid
-UserCourse.status == active + final_grade → invalid
-UserCourse.status == future + final_grade → invalid
-```
-
-Assessment timing tests apply when Assessment enters the applicable release scope.
+- UserCourse remains a historical User-to-StudyPlanCourse relationship;
+- CourseEnrollment owns `status` and `final_grade`;
+- only `IN_PROGRESS`, `PASSED`, and `FAILED` are accepted as CourseEnrollment statuses;
+- academic structure is isolated by CourseOffering;
+- every Topic belongs to one Unit and every Subtopic belongs to one Topic;
+- removed Units and Topics are preserved rather than physically deleted;
+- AcademicSources pass through proposal and validation before confirmed structure is changed;
+- EnrollmentTopic supports manual forward and backward state changes;
+- Topic removal preserves EnrollmentTopic state;
+- StudySessions, PracticeSessions, and schedules do not change `student_status` automatically;
+- schedules do not automatically mark Topics as `SEEN`;
+- Practice remains independent from Progress and Mastery;
+- derived metrics exclude stored duplicate sources of truth.
 
 The intent is to turn domain rules into verifiable behavior.
 
@@ -419,7 +515,7 @@ Do not return uncontrolled database structures directly.
 
 Structural validation belongs mainly in schemas and covers required fields, incorrect types, and empty strings.
 
-Domain validation belongs mainly in services, for example disallowing `final_grade` for a UserCourse with an `active` CourseStatus.
+Domain validation belongs mainly in services. Examples include limiting CourseEnrollment status to the V0.1 values, preserving removed Topic history, validating proposed academic structure before confirmation, and preventing activity creation from changing EnrollmentTopic state.
 
 Persistence validation may be reinforced through the database, for example valid foreign keys and unique constraints.
 
@@ -463,7 +559,7 @@ Avoid dependencies added “just in case.”
 
 Given two correct implementations, prefer the one that is easier to understand and maintain.
 
-Do not introduce unnecessary interfaces, factories, extra layers, redundant wrappers, enterprise patterns without a concrete problem, or generic repositories without current value.
+Do not introduce unnecessary interfaces, factories, extra layers, redundant wrappers, enterprise patterns without a concrete problem, or generic repositories without current value. In particular, V0.1 does not require CQRS, event buses, microservices, or separate read and write architectures.
 
 The goal is a clear system, not demonstrating a large number of patterns.
 
@@ -557,6 +653,12 @@ behavior verification
 MIGRATIONS
 database schema evolution
 ```
+
+### Derived information
+
+Course progress, student progress, catch-up progress, academic gaps, assessment preparation coverage, and `last_studied_at` are computed from authoritative records. They must not be persisted as independent sources of truth.
+
+Progress, Practice, and Mastery answer different questions and must remain separate. Practice is included in V0.1; Mastery is not.
 
 ---
 
