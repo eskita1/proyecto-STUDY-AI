@@ -17,6 +17,10 @@ class UniversityAlreadyExistsError(Exception):
     pass
 
 
+class UniversityConflictError(Exception):
+    pass
+
+
 class UniversityValidationError(Exception):
     pass
 
@@ -81,7 +85,10 @@ class UniversityService:
 
     def delete(self, university_id: int) -> None:
         university = self.get(university_id)
-        self.repository.delete(university)
+        try:
+            self.repository.delete(university)
+        except UniversityRepositoryConflictError as error:
+            raise UniversityConflictError from error
 
     def _ensure_unique(
         self,

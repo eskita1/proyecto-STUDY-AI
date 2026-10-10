@@ -8,6 +8,7 @@ from app.repositories.university import UniversityRepository
 from app.schemas.university import UniversityCreate, UniversityRead, UniversityUpdate
 from app.services.university import (
     UniversityAlreadyExistsError,
+    UniversityConflictError,
     UniversityNotFoundError,
     UniversityService,
     UniversityValidationError,
@@ -35,6 +36,11 @@ def _translate_service_error(error: Exception) -> None:
         raise HTTPException(
             status_code=409,
             detail="University already exists in this country",
+        ) from error
+    if isinstance(error, UniversityConflictError):
+        raise HTTPException(
+            status_code=409,
+            detail="University is referenced by other records",
         ) from error
     if isinstance(error, UniversityValidationError):
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -98,6 +104,6 @@ def delete_university(
 ) -> Response:
     try:
         service.delete(university_id)
-    except UniversityNotFoundError as error:
+    except (UniversityConflictError, UniversityNotFoundError) as error:
         _translate_service_error(error)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

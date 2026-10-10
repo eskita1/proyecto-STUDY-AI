@@ -41,7 +41,9 @@ def test_session_factory():
 @pytest.fixture
 def client(test_session_factory) -> Generator[TestClient, None, None]:
     with test_session_factory() as cleanup_session:
-        cleanup_session.execute(text("DELETE FROM universities"))
+        cleanup_session.execute(
+            text("TRUNCATE faculties, universities RESTART IDENTITY")
+        )
         cleanup_session.commit()
 
     def override_get_db() -> Generator[Session, None, None]:

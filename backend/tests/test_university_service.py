@@ -6,6 +6,7 @@ import pytest
 from app.repositories.university import UniversityRepositoryConflictError
 from app.services.university import (
     UniversityAlreadyExistsError,
+    UniversityConflictError,
     UniversityNotFoundError,
     UniversityService,
     UniversityValidationError,
@@ -106,3 +107,13 @@ def test_delete_rejects_missing_university():
         service.delete(99)
 
     repository.delete.assert_not_called()
+
+
+def test_delete_translates_persistence_conflict():
+    service, repository = make_service()
+    university = SimpleNamespace(id=1, name="University", country_code="AR")
+    repository.get.return_value = university
+    repository.delete.side_effect = UniversityRepositoryConflictError
+
+    with pytest.raises(UniversityConflictError):
+        service.delete(1)
