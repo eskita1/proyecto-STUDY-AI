@@ -5,6 +5,7 @@ from app.routes.enrollment import router as enrollment_router
 from app.routes.faculty import router as faculty_router
 from app.routes.institutional import router as institutional_router
 from app.routes.planning import router as planning_router
+from app.routes.study import router as study_router
 from app.routes.tracking import router as tracking_router
 from app.routes.university import router as university_router
 
@@ -14,6 +15,7 @@ app.include_router(faculty_router)
 app.include_router(enrollment_router)
 app.include_router(institutional_router)
 app.include_router(planning_router)
+app.include_router(study_router)
 app.include_router(tracking_router)
 app.include_router(university_router)
 

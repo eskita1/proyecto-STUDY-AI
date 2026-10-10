@@ -16,6 +16,7 @@ from app.models.institutional import (
     UserCareer,
 )
 from app.models.planning import Assessment, AssessmentTopic, CourseScheduleItem
+from app.models.study import StudySession, StudySessionTopic
 from app.models.tracking import EnrollmentTopic
 from app.models.university import University
 
@@ -33,6 +34,8 @@ __all__ = [
     "Faculty",
     "StudyPlan",
     "StudyPlanCourse",
+    "StudySession",
+    "StudySessionTopic",
     "Subtopic",
     "Topic",
     "Unit",
