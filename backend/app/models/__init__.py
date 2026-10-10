@@ -1,3 +1,10 @@
+from app.models.academic import (
+    AcademicSource,
+    ExtractionProposal,
+    Subtopic,
+    Topic,
+    Unit,
+)
 from app.models.enrollment import CourseEnrollment, CourseOffering, UserCourse
 from app.models.faculty import Faculty
 from app.models.institutional import (
@@ -8,6 +15,7 @@ from app.models.institutional import (
     User,
     UserCareer,
 )
+from app.models.tracking import EnrollmentTopic
 from app.models.university import University
 
 __all__ = [
@@ -16,6 +24,7 @@ __all__ = [
     "Course",
     "CourseEnrollment",
     "CourseOffering",
+    "EnrollmentTopic",
     "ExtractionProposal",
     "Faculty",
     "StudyPlan",
@@ -28,10 +37,3 @@ __all__ = [
     "UserCareer",
     "UserCourse",
 ]
-from app.models.academic import (
-    AcademicSource,
-    ExtractionProposal,
-    Subtopic,
-    Topic,
-    Unit,
-)
