@@ -8,6 +8,25 @@ jobs:
   backend-checks:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: studyai
+          POSTGRES_PASSWORD: studyai
+          POSTGRES_DB: studyai_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U studyai -d studyai_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+psycopg://studyai:studyai@localhost:5432/studyai_test
+      TEST_DATABASE_URL: postgresql+psycopg://studyai:studyai@localhost:5432/studyai_test
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -26,6 +45,13 @@ jobs:
       - name: Run tests
         working-directory: backend
         run: pytest
+
+      - name: Verify migrations
+        working-directory: backend
+        run: |
+          alembic check
+          alembic downgrade base
+          alembic upgrade head
 
       - name: Run Ruff
         working-directory: backend

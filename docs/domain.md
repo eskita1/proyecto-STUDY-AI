@@ -31,6 +31,21 @@ The domain must not assume that every `User` will always be exclusively a studen
 
 `University` represents a University institution.
 
+Universities form a centralized academic catalog shared by all Users. The catalog
+must support institutions from any country; initial validation and testing focus
+on Argentine institutions without restricting the model to Argentina.
+
+A University has:
+
+- an automatically generated integer identifier;
+- a required name, stored with its original capitalization and normalized
+  whitespace;
+- a required uppercase ISO 3166-1 alpha-2 country code.
+
+University names must be unique within a country when compared without regard to
+case or trivial whitespace differences. Country-code validation in V0.1 verifies
+the two-letter format; maintaining a separate country registry is not required.
+
 Examples:
 
 - University of Buenos Aires;
