@@ -121,6 +121,55 @@ def structure_payload() -> dict:
     }
 
 
+def setup_study_plans(client: TestClient) -> tuple[dict, dict]:
+    university = post(
+        client, "/universities", {"name": "University", "country_code": "AR"}
+    )
+    faculty = post(
+        client,
+        "/faculties",
+        {"university_id": university["id"], "name": "Engineering"},
+    )
+    career = post(
+        client,
+        "/careers",
+        {"faculty_id": faculty["id"], "name": "Computer Science"},
+    )
+    first = post(
+        client,
+        "/study-plans",
+        {"career_id": career["id"], "name": "Plan 2026"},
+    )
+    second = post(
+        client,
+        "/study-plans",
+        {"career_id": career["id"], "name": "Plan 2027"},
+    )
+    return first, second
+
+
+def study_plan_source(client: TestClient, study_plan_id: int) -> dict:
+    return post(
+        client,
+        "/academic-sources",
+        {"type": "STUDY_PLAN", "study_plan_id": study_plan_id},
+    )
+
+
+def study_plan_proposal(
+    client: TestClient, study_plan_id: int, courses: list[dict]
+) -> dict:
+    academic_source = study_plan_source(client, study_plan_id)
+    return post(
+        client,
+        "/extraction-proposals",
+        {
+            "academic_source_id": academic_source["id"],
+            "extracted_data": {"courses": courses},
+        },
+    )
+
+
 def test_source_ownership_rules(client: TestClient):
     plan, offering = setup_offering(client)
     plan_source = post(
@@ -318,3 +367,258 @@ def test_academic_openapi_contracts(client: TestClient):
         "/course-offerings/{offering_id}/units",
     ):
         assert path in schema["paths"]
+
+
+def test_study_plan_confirmation_creates_relations_with_existing_and_new_courses(
+    client: TestClient,
+):
+    study_plan, _ = setup_study_plans(client)
+    existing = post(client, "/courses", {"name": "Algorithms", "code": "CS-101"})
+    proposal = study_plan_proposal(
+        client,
+        study_plan["id"],
+        [
+            {
+                "action": "CREATE",
+                "study_plan_course_id": None,
+                "course_id": existing["id"],
+                "name": None,
+                "code": None,
+            },
+            {
+                "action": "CREATE",
+                "study_plan_course_id": None,
+                "course_id": None,
+                "name": "  Mathematical   Analysis II ",
+                "code": "61.03",
+            },
+        ],
+    )
+
+    response = client.post(f"/extraction-proposals/{proposal['id']}/confirm")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "CONFIRMED"
+    courses = client.get("/courses").json()
+    created = next(
+        item for item in courses if item["name"] == "Mathematical Analysis II"
+    )
+    assert created["code"] == "61.03"
+    relations = client.get("/study-plan-courses").json()
+    assert {(item["study_plan_id"], item["course_id"]) for item in relations} == {
+        (study_plan["id"], existing["id"]),
+        (study_plan["id"], created["id"]),
+    }
+
+
+def test_study_plan_confirmation_rejects_duplicate_course_and_stays_pending(
+    client: TestClient,
+):
+    study_plan, _ = setup_study_plans(client)
+    course = post(client, "/courses", {"name": "Algorithms"})
+    post(
+        client,
+        "/study-plan-courses",
+        {"study_plan_id": study_plan["id"], "course_id": course["id"]},
+    )
+    proposal = study_plan_proposal(
+        client,
+        study_plan["id"],
+        [
+            {
+                "action": "CREATE",
+                "study_plan_course_id": None,
+                "course_id": course["id"],
+            }
+        ],
+    )
+
+    response = client.post(f"/extraction-proposals/{proposal['id']}/confirm")
+
+    assert response.status_code == 409
+    assert (
+        client.get(f"/extraction-proposals/{proposal['id']}").json()["status"]
+        == "PENDING"
+    )
+
+
+def test_study_plan_confirmation_updates_only_relation_owned_course_id(
+    client: TestClient,
+):
+    study_plan, _ = setup_study_plans(client)
+    old_course = post(client, "/courses", {"name": "Old Course"})
+    new_course = post(client, "/courses", {"name": "New Course"})
+    relation = post(
+        client,
+        "/study-plan-courses",
+        {"study_plan_id": study_plan["id"], "course_id": old_course["id"]},
+    )
+    proposal = study_plan_proposal(
+        client,
+        study_plan["id"],
+        [
+            {
+                "action": "UPDATE",
+                "study_plan_course_id": relation["id"],
+                "course_id": new_course["id"],
+            }
+        ],
+    )
+
+    response = client.post(f"/extraction-proposals/{proposal['id']}/confirm")
+
+    assert response.status_code == 200
+    updated = client.get(f"/study-plan-courses/{relation['id']}").json()
+    assert updated["course_id"] == new_course["id"]
+    assert client.get(f"/courses/{old_course['id']}").json()["name"] == "Old Course"
+
+
+def test_study_plan_confirmation_rejects_foreign_relation_and_course_mutation(
+    client: TestClient,
+):
+    first_plan, second_plan = setup_study_plans(client)
+    course = post(client, "/courses", {"name": "Algorithms"})
+    foreign_relation = post(
+        client,
+        "/study-plan-courses",
+        {"study_plan_id": second_plan["id"], "course_id": course["id"]},
+    )
+    foreign_proposal = study_plan_proposal(
+        client,
+        first_plan["id"],
+        [
+            {
+                "action": "UPDATE",
+                "study_plan_course_id": foreign_relation["id"],
+                "course_id": course["id"],
+            }
+        ],
+    )
+    mutation_proposal = study_plan_proposal(
+        client,
+        second_plan["id"],
+        [
+            {
+                "action": "UPDATE",
+                "study_plan_course_id": foreign_relation["id"],
+                "course_id": course["id"],
+                "name": "Renamed globally",
+            }
+        ],
+    )
+
+    assert (
+        client.post(
+            f"/extraction-proposals/{foreign_proposal['id']}/confirm"
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            f"/extraction-proposals/{mutation_proposal['id']}/confirm"
+        ).status_code
+        == 422
+    )
+    assert client.get(f"/courses/{course['id']}").json()["name"] == "Algorithms"
+
+
+def test_study_plan_confirmation_removes_only_unreferenced_relation(
+    client: TestClient,
+):
+    study_plan, _ = setup_study_plans(client)
+    unused_course = post(client, "/courses", {"name": "Unused"})
+    used_course = post(client, "/courses", {"name": "Used"})
+    unused = post(
+        client,
+        "/study-plan-courses",
+        {"study_plan_id": study_plan["id"], "course_id": unused_course["id"]},
+    )
+    used = post(
+        client,
+        "/study-plan-courses",
+        {"study_plan_id": study_plan["id"], "course_id": used_course["id"]},
+    )
+    user = post(client, "/users", {})
+    post(
+        client,
+        "/user-courses",
+        {
+            "user_id": user["id"],
+            "study_plan_course_id": used["id"],
+        },
+    )
+    remove_unused = study_plan_proposal(
+        client,
+        study_plan["id"],
+        [{"action": "REMOVE", "study_plan_course_id": unused["id"]}],
+    )
+    remove_used = study_plan_proposal(
+        client,
+        study_plan["id"],
+        [{"action": "REMOVE", "study_plan_course_id": used["id"]}],
+    )
+
+    assert (
+        client.post(f"/extraction-proposals/{remove_unused['id']}/confirm").status_code
+        == 200
+    )
+    assert client.get(f"/study-plan-courses/{unused['id']}").status_code == 404
+    failure = client.post(f"/extraction-proposals/{remove_used['id']}/confirm")
+    assert failure.status_code == 409
+    assert "referenced" in failure.json()["detail"]
+    assert client.get(f"/study-plan-courses/{used['id']}").status_code == 200
+
+
+def test_invalid_study_plan_action_rolls_back_every_change(client: TestClient):
+    study_plan, _ = setup_study_plans(client)
+    proposal = study_plan_proposal(
+        client,
+        study_plan["id"],
+        [
+            {
+                "action": "CREATE",
+                "study_plan_course_id": None,
+                "course_id": None,
+                "name": "Must Roll Back",
+                "code": "ROLLBACK",
+            },
+            {
+                "action": "UPDATE",
+                "study_plan_course_id": 999,
+                "course_id": 999,
+            },
+        ],
+    )
+
+    response = client.post(f"/extraction-proposals/{proposal['id']}/confirm")
+
+    assert response.status_code == 404
+    assert all(
+        course["name"] != "Must Roll Back" for course in client.get("/courses").json()
+    )
+    assert client.get("/study-plan-courses").json() == []
+    assert (
+        client.get(f"/extraction-proposals/{proposal['id']}").json()["status"]
+        == "PENDING"
+    )
+
+
+def test_invalid_study_plan_payload_is_rejected(client: TestClient):
+    study_plan, _ = setup_study_plans(client)
+    academic_source = study_plan_source(client, study_plan["id"])
+    proposal = post(
+        client,
+        "/extraction-proposals",
+        {
+            "academic_source_id": academic_source["id"],
+            "extracted_data": {"courses": [{"action": "CREATE"}]},
+        },
+    )
+
+    response = client.post(f"/extraction-proposals/{proposal['id']}/confirm")
+
+    assert response.status_code == 422
+    assert (
+        client.get(f"/extraction-proposals/{proposal['id']}").json()["status"]
+        == "PENDING"
+    )

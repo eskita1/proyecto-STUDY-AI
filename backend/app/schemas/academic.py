@@ -70,6 +70,49 @@ class CourseStructurePayload(BaseModel):
     units: list[UnitChange]
 
 
+class StudyPlanCourseChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: ChangeAction
+    study_plan_course_id: int | None = Field(default=None, gt=0)
+    course_id: int | None = Field(default=None, gt=0)
+    name: str | None = None
+    code: str | None = None
+
+    @model_validator(mode="after")
+    def validate_action(self):
+        if self.action == ChangeAction.CREATE:
+            if self.study_plan_course_id is not None:
+                raise ValueError("CREATE requires a null study_plan_course_id")
+            if self.course_id is None and not self.name:
+                raise ValueError("CREATE without course_id requires a Course name")
+            if self.course_id is not None and (
+                self.name is not None or self.code is not None
+            ):
+                raise ValueError("CREATE with course_id cannot mutate Course fields")
+        elif self.action == ChangeAction.UPDATE:
+            if self.study_plan_course_id is None or self.course_id is None:
+                raise ValueError("UPDATE requires study_plan_course_id and course_id")
+            if self.name is not None or self.code is not None:
+                raise ValueError("UPDATE cannot mutate Course fields")
+        else:
+            if self.study_plan_course_id is None:
+                raise ValueError("REMOVE requires study_plan_course_id")
+            if (
+                self.course_id is not None
+                or self.name is not None
+                or self.code is not None
+            ):
+                raise ValueError("REMOVE accepts only study_plan_course_id")
+        return self
+
+
+class StudyPlanPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    courses: list[StudyPlanCourseChange] = Field(min_length=1)
+
+
 class AcademicSourceCreate(BaseModel):
     type: AcademicSourceType
     study_plan_id: int | None = Field(default=None, gt=0)

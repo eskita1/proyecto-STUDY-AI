@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,7 @@ from app.models.academic import (
     Topic,
     Unit,
 )
+from app.models.institutional import Course, StudyPlanCourse
 
 
 class AcademicRepositoryConflictError(Exception):
@@ -62,6 +63,31 @@ class AcademicStructureRepository:
     def get_subtopic(self, entity_id: int) -> Subtopic | None:
         return self.session.get(Subtopic, entity_id)
 
+    def get_course(self, entity_id: int) -> Course | None:
+        return self.session.get(Course, entity_id)
+
+    def find_course_by_name(self, name: str) -> Course | None:
+        return self.session.scalar(
+            select(Course).where(func.lower(Course.name) == name.lower())
+        )
+
+    def get_study_plan_course(self, entity_id: int) -> StudyPlanCourse | None:
+        return self.session.get(StudyPlanCourse, entity_id)
+
+    def find_study_plan_course(
+        self,
+        study_plan_id: int,
+        course_id: int,
+        exclude_id: int | None = None,
+    ) -> StudyPlanCourse | None:
+        statement = select(StudyPlanCourse).where(
+            StudyPlanCourse.study_plan_id == study_plan_id,
+            StudyPlanCourse.course_id == course_id,
+        )
+        if exclude_id is not None:
+            statement = statement.where(StudyPlanCourse.id != exclude_id)
+        return self.session.scalar(statement)
+
     def list_units(self, course_offering_id: int) -> list[Unit]:
         statement = (
             select(Unit)
@@ -98,6 +124,14 @@ class AcademicStructureRepository:
             raise AcademicRepositoryConflictError from error
 
     def delete_subtopic(self, entity: Subtopic) -> None:
+        try:
+            self.session.delete(entity)
+            self.session.flush()
+        except IntegrityError as error:
+            self.session.rollback()
+            raise AcademicRepositoryConflictError from error
+
+    def delete_study_plan_course(self, entity: StudyPlanCourse) -> None:
         try:
             self.session.delete(entity)
             self.session.flush()

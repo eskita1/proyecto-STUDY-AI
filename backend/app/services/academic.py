@@ -13,8 +13,9 @@ from app.models.academic import (
     Topic,
     Unit,
 )
+from app.models.institutional import Course, StudyPlanCourse
 from app.repositories.academic import AcademicRepositoryConflictError
-from app.schemas.academic import ChangeAction, CourseStructurePayload
+from app.schemas.academic import ChangeAction, CourseStructurePayload, StudyPlanPayload
 from app.services.institutional import InstitutionalValidationError, normalize_name
 
 
@@ -139,6 +140,13 @@ class ProposalService:
             if source.course_offering_id is not None:
                 payload = CourseStructurePayload.model_validate(proposal.extracted_data)
                 self._apply(payload, source.course_offering_id, proposal.id)
+            elif (
+                source.type == AcademicSourceType.STUDY_PLAN
+                and source.study_plan_id is not None
+                and source.course_offering_id is None
+            ):
+                payload = StudyPlanPayload.model_validate(proposal.extracted_data)
+                self._apply_study_plan(payload, source.study_plan_id)
             else:
                 raise AcademicValidationError(
                     "StudyPlan-owned proposal confirmation payload is not defined"
@@ -152,7 +160,7 @@ class ProposalService:
         except ValidationError as error:
             self.structure_repository.rollback()
             raise AcademicValidationError(
-                "Invalid course academic structure payload"
+                "Invalid academic proposal payload"
             ) from error
         except (AcademicNotFoundError, AcademicValidationError, AcademicConflictError):
             self.structure_repository.rollback()
@@ -190,6 +198,84 @@ class ProposalService:
                     self._subtopic(
                         subtopic_change, topic, offering_id, proposal_id, seen
                     )
+
+    def _apply_study_plan(self, payload: StudyPlanPayload, study_plan_id: int) -> None:
+        seen: set[int] = set()
+        for change in payload.courses:
+            if change.study_plan_course_id is not None:
+                if change.study_plan_course_id in seen:
+                    raise AcademicValidationError(
+                        "StudyPlanCourse id appears more than once"
+                    )
+                seen.add(change.study_plan_course_id)
+            if change.action == ChangeAction.CREATE:
+                self._create_study_plan_course(change, study_plan_id)
+            elif change.action == ChangeAction.UPDATE:
+                self._update_study_plan_course(change, study_plan_id)
+            else:
+                self._remove_study_plan_course(change, study_plan_id)
+
+    def _create_study_plan_course(self, change, study_plan_id: int) -> None:
+        if change.course_id is not None:
+            course = self.structure_repository.get_course(change.course_id)
+            if course is None:
+                raise AcademicNotFoundError("Course")
+        else:
+            course_name = normalized(change.name, "Course")
+            if self.structure_repository.find_course_by_name(course_name) is not None:
+                raise AcademicConflictError(
+                    "Course already exists; reference it by course_id"
+                )
+            course = Course(name=course_name, code=change.code)
+            self.structure_repository.add(course)
+        if (
+            self.structure_repository.find_study_plan_course(study_plan_id, course.id)
+            is not None
+        ):
+            raise AcademicConflictError("Course already belongs to StudyPlan")
+        self.structure_repository.add(
+            StudyPlanCourse(study_plan_id=study_plan_id, course_id=course.id)
+        )
+
+    def _update_study_plan_course(self, change, study_plan_id: int) -> None:
+        relation = self._owned_study_plan_course(
+            change.study_plan_course_id, study_plan_id
+        )
+        course = self.structure_repository.get_course(change.course_id)
+        if course is None:
+            raise AcademicNotFoundError("Course")
+        if (
+            self.structure_repository.find_study_plan_course(
+                study_plan_id, course.id, exclude_id=relation.id
+            )
+            is not None
+        ):
+            raise AcademicConflictError("Course already belongs to StudyPlan")
+        relation.course_id = course.id
+        self.structure_repository.add(relation)
+
+    def _remove_study_plan_course(self, change, study_plan_id: int) -> None:
+        relation = self._owned_study_plan_course(
+            change.study_plan_course_id, study_plan_id
+        )
+        try:
+            self.structure_repository.delete_study_plan_course(relation)
+        except AcademicRepositoryConflictError as error:
+            raise AcademicConflictError(
+                "StudyPlanCourse is referenced and cannot be removed"
+            ) from error
+
+    def _owned_study_plan_course(
+        self, study_plan_course_id: int, study_plan_id: int
+    ) -> StudyPlanCourse:
+        relation = self.structure_repository.get_study_plan_course(study_plan_course_id)
+        if relation is None:
+            raise AcademicNotFoundError("StudyPlanCourse")
+        if relation.study_plan_id != study_plan_id:
+            raise AcademicValidationError(
+                "StudyPlanCourse belongs to another StudyPlan"
+            )
+        return relation
 
     def _unit(self, change, offering_id, proposal_id, seen) -> Unit:
         unit = (
