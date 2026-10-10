@@ -41,9 +41,7 @@ def test_session_factory():
 @pytest.fixture
 def client(test_session_factory) -> Generator[TestClient, None, None]:
     with test_session_factory() as cleanup_session:
-        cleanup_session.execute(
-            text("TRUNCATE faculties, universities RESTART IDENTITY")
-        )
+        cleanup_session.execute(text("TRUNCATE universities RESTART IDENTITY CASCADE"))
         cleanup_session.commit()
 
     def override_get_db() -> Generator[Session, None, None]:
@@ -209,7 +207,7 @@ def test_university_delete_is_restricted_while_faculty_exists(client: TestClient
 
 def test_database_rejects_invalid_university_reference(test_session_factory):
     with test_session_factory() as session:
-        session.execute(text("TRUNCATE faculties, universities RESTART IDENTITY"))
+        session.execute(text("TRUNCATE universities RESTART IDENTITY CASCADE"))
         session.commit()
 
         with pytest.raises(IntegrityError):
@@ -227,7 +225,7 @@ def test_database_enforces_scoped_case_insensitive_uniqueness(
     test_session_factory,
 ):
     with test_session_factory() as session:
-        session.execute(text("TRUNCATE faculties, universities RESTART IDENTITY"))
+        session.execute(text("TRUNCATE universities RESTART IDENTITY CASCADE"))
         university_id = session.scalar(
             text(
                 "INSERT INTO universities (name, country_code) "
@@ -257,7 +255,7 @@ def test_database_enforces_scoped_case_insensitive_uniqueness(
 
 def test_database_rejects_noncanonical_name(test_session_factory):
     with test_session_factory() as session:
-        session.execute(text("TRUNCATE faculties, universities RESTART IDENTITY"))
+        session.execute(text("TRUNCATE universities RESTART IDENTITY CASCADE"))
         university_id = session.scalar(
             text(
                 "INSERT INTO universities (name, country_code) "
