@@ -123,14 +123,12 @@ def structure_payload() -> dict:
 
 def test_source_ownership_rules(client: TestClient):
     plan, offering = setup_offering(client)
-    assert (
-        post(
-            client,
-            "/academic-sources",
-            {"type": "STUDY_PLAN", "study_plan_id": plan["id"]},
-        )["status"]
-        == "PENDING"
+    plan_source = post(
+        client,
+        "/academic-sources",
+        {"type": "STUDY_PLAN", "study_plan_id": plan["id"]},
     )
+    assert plan_source["status"] == "PENDING"
     assert (
         post(
             client,
@@ -152,6 +150,23 @@ def test_source_ownership_rules(client: TestClient):
         "/academic-sources", json={"type": "SYLLABUS", "study_plan_id": plan["id"]}
     )
     assert wrong.status_code == 422
+
+    proposal = post(
+        client,
+        "/extraction-proposals",
+        {
+            "academic_source_id": plan_source["id"],
+            "extracted_data": {"items": []},
+        },
+    )
+    assert (
+        client.post(f"/extraction-proposals/{proposal['id']}/confirm").status_code
+        == 422
+    )
+    assert (
+        client.get(f"/extraction-proposals/{proposal['id']}").json()["status"]
+        == "PENDING"
+    )
 
 
 def test_confirmation_creates_structure_and_provenance(client: TestClient):

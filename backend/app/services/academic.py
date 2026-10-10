@@ -139,9 +139,9 @@ class ProposalService:
             if source.course_offering_id is not None:
                 payload = CourseStructurePayload.model_validate(proposal.extracted_data)
                 self._apply(payload, source.course_offering_id, proposal.id)
-            elif not proposal.extracted_data:
+            else:
                 raise AcademicValidationError(
-                    "StudyPlan proposal extracted_data cannot be empty"
+                    "StudyPlan-owned proposal confirmation payload is not defined"
                 )
             proposal.status = ProposalStatus.CONFIRMED
             proposal.reviewed_at = datetime.now(UTC)
