@@ -124,19 +124,27 @@ class ProposalService:
         return self._save(entity)
 
     def reject(self, entity_id: int) -> ExtractionProposal:
-        entity = self._pending(entity_id)
-        entity.status = ProposalStatus.REJECTED
-        entity.reviewed_at = datetime.now(UTC)
-        return self._save(entity)
+        try:
+            entity = self._pending_for_review(entity_id)
+            entity.status = ProposalStatus.REJECTED
+            entity.reviewed_at = datetime.now(UTC)
+            return self._save(entity)
+        except (AcademicNotFoundError, AcademicConflictError):
+            self.structure_repository.rollback()
+            raise
 
     def confirm(self, entity_id: int) -> ExtractionProposal:
-        proposal = self._pending(entity_id)
-        source = self.source_repository.get(proposal.academic_source_id)
-        if source is None:
-            raise AcademicNotFoundError("AcademicSource")
-        if source.status != AcademicSourceStatus.PENDING:
-            raise AcademicConflictError("AcademicSource is not PENDING")
         try:
+            proposal = self._pending_for_review(entity_id)
+            source = self.source_repository.get_for_update(proposal.academic_source_id)
+            if source is None:
+                raise AcademicNotFoundError("AcademicSource")
+            if source.status != AcademicSourceStatus.PENDING:
+                raise AcademicConflictError("AcademicSource is not PENDING")
+            if source.type == AcademicSourceType.OTHER:
+                raise AcademicValidationError(
+                    "OTHER sources are informational and cannot confirm structure"
+                )
             if source.course_offering_id is not None:
                 payload = CourseStructurePayload.model_validate(proposal.extracted_data)
                 self._apply(payload, source.course_offering_id, proposal.id)
@@ -170,8 +178,10 @@ class ProposalService:
             raise AcademicConflictError("Proposal confirmation conflict") from error
         return proposal
 
-    def _pending(self, entity_id: int) -> ExtractionProposal:
-        entity = self.get(entity_id)
+    def _pending_for_review(self, entity_id: int) -> ExtractionProposal:
+        entity = self.proposal_repository.get_for_update(entity_id)
+        if entity is None:
+            raise AcademicNotFoundError("ExtractionProposal")
         if entity.status != ProposalStatus.PENDING:
             raise AcademicConflictError("Only a PENDING proposal may be reviewed")
         return entity

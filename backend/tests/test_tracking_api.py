@@ -168,7 +168,7 @@ def test_cross_offering_topic_is_rejected(client: TestClient):
     source = post(
         client,
         "/academic-sources",
-        {"type": "OTHER", "course_offering_id": other["id"]},
+        {"type": "SYLLABUS", "course_offering_id": other["id"]},
     )
     payload = {
         "units": [
@@ -233,7 +233,7 @@ def test_progress_is_derived_and_removed_topics_are_excluded(client: TestClient)
     source = post(
         client,
         "/academic-sources",
-        {"type": "OTHER", "course_offering_id": offering["id"]},
+        {"type": "THEORETICAL_MATERIAL", "course_offering_id": offering["id"]},
     )
     remove = {
         "units": [
@@ -271,7 +271,7 @@ def test_zero_denominators_and_openapi(client: TestClient):
     source = post(
         client,
         "/academic-sources",
-        {"type": "OTHER", "course_offering_id": offering["id"]},
+        {"type": "SCHEDULE", "course_offering_id": offering["id"]},
     )
     unit_id = client.get(f"/course-offerings/{offering['id']}/units").json()[0]["id"]
     proposal = post(

@@ -23,6 +23,15 @@ class AcademicSourceRepository:
     def get(self, entity_id: int) -> AcademicSource | None:
         return self.session.get(AcademicSource, entity_id)
 
+    def get_for_update(self, entity_id: int) -> AcademicSource | None:
+        statement = (
+            select(AcademicSource)
+            .where(AcademicSource.id == entity_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return self.session.scalar(statement)
+
     def list(self) -> list[AcademicSource]:
         return list(
             self.session.scalars(select(AcademicSource).order_by(AcademicSource.id))
@@ -38,6 +47,15 @@ class ExtractionProposalRepository:
 
     def get(self, entity_id: int) -> ExtractionProposal | None:
         return self.session.get(ExtractionProposal, entity_id)
+
+    def get_for_update(self, entity_id: int) -> ExtractionProposal | None:
+        statement = (
+            select(ExtractionProposal)
+            .where(ExtractionProposal.id == entity_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return self.session.scalar(statement)
 
     def list(self) -> list[ExtractionProposal]:
         return list(

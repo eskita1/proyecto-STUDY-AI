@@ -178,6 +178,94 @@ def test_cross_course_enrollment_and_offering_dates_are_rejected(client: TestCli
     assert response.status_code == 422
 
 
+def create_other_study_plan_course(client: TestClient, name: str) -> dict:
+    course = post(client, "/courses", {"name": name})
+    plan_id = client.get("/study-plans").json()[0]["id"]
+    return post(
+        client,
+        "/study-plan-courses",
+        {"study_plan_id": plan_id, "course_id": course["id"]},
+    )
+
+
+def test_user_course_reparenting_before_enrollment_succeeds(client: TestClient):
+    _, user_course, _ = setup_chain(client)
+    other_spc = create_other_study_plan_course(client, "Databases")
+
+    response = client.patch(
+        f"/user-courses/{user_course['id']}",
+        json={"study_plan_course_id": other_spc["id"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["study_plan_course_id"] == other_spc["id"]
+
+
+def test_user_course_reparenting_after_enrollment_is_rejected(client: TestClient):
+    spc, user_course, offering = setup_chain(client)
+    enrollment = post(
+        client,
+        "/course-enrollments",
+        {
+            "user_course_id": user_course["id"],
+            "course_offering_id": offering["id"],
+            "status": "FAILED",
+        },
+    )
+    other_spc = create_other_study_plan_course(client, "Databases")
+
+    response = client.patch(
+        f"/user-courses/{user_course['id']}",
+        json={"study_plan_course_id": other_spc["id"]},
+    )
+
+    assert response.status_code == 409
+    assert client.get(f"/user-courses/{user_course['id']}").json()[
+        "study_plan_course_id"
+    ] == spc["id"]
+    assert client.get(f"/course-enrollments/{enrollment['id']}").json() == enrollment
+
+
+def test_course_offering_reparenting_before_enrollment_succeeds(client: TestClient):
+    _, _, offering = setup_chain(client)
+    other_spc = create_other_study_plan_course(client, "Databases")
+
+    response = client.patch(
+        f"/course-offerings/{offering['id']}",
+        json={"study_plan_course_id": other_spc["id"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["study_plan_course_id"] == other_spc["id"]
+
+
+def test_course_offering_reparenting_after_enrollment_is_rejected(
+    client: TestClient,
+):
+    spc, user_course, offering = setup_chain(client)
+    enrollment = post(
+        client,
+        "/course-enrollments",
+        {
+            "user_course_id": user_course["id"],
+            "course_offering_id": offering["id"],
+            "status": "FAILED",
+        },
+    )
+    other_spc = create_other_study_plan_course(client, "Databases")
+
+    response = client.patch(
+        f"/course-offerings/{offering['id']}",
+        json={"study_plan_course_id": other_spc["id"]},
+    )
+
+    assert response.status_code == 409
+    assert client.get(f"/course-offerings/{offering['id']}").json()[
+        "study_plan_course_id"
+    ] == spc["id"]
+    assert client.get(f"/course-enrollments/{enrollment['id']}").json() == enrollment
+
+
 def test_openapi_contains_enrollment_contracts(client: TestClient):
     schema = client.get("/openapi.json").json()
     for path in ("/user-courses", "/course-offerings", "/course-enrollments"):

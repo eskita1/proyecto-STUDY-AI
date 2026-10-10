@@ -338,6 +338,10 @@ An AcademicSource type is one of:
 - `PRACTICE_MATERIAL`;
 - `OTHER`.
 
+`OTHER` may have a StudyPlan or CourseOffering owner, but in V0.1 it is
+informational only. It has no confirmation mapping into either confirmed
+structure and cannot mutate the domain through an ExtractionProposal.
+
 AI may assist with extraction and proposals, but it must not write directly to the confirmed academic domain. Routes and repositories must not provide a bypass around service-level validation for confirmed Units, Topics, or Subtopics.
 
 The database may reinforce invariants with constraints when reasonable, but must not be the only place where important domain logic is expressed.

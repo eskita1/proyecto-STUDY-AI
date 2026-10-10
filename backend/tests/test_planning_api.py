@@ -258,3 +258,53 @@ def test_assessment_zero_denominator_and_openapi(client: TestClient):
     schema = client.get("/openapi.json").json()
     assert "/course-schedule-items" in schema["paths"]
     assert "/assessment-topics" in schema["paths"]
+
+
+def test_removed_unit_is_excluded_from_assessment_preparation(client: TestClient):
+    offering, _, unit, topic, _, enrollment, _ = setup(client)
+    assessment = post(
+        client,
+        "/assessments",
+        {
+            "course_offering_id": offering["id"],
+            "name": "Midterm",
+            "type": "MIDTERM",
+            "date": "2026-05-01",
+        },
+    )
+    post(
+        client,
+        "/assessment-topics",
+        {"assessment_id": assessment["id"], "topic_id": topic["id"]},
+    )
+    initial = client.get(
+        f"/course-enrollments/{enrollment['id']}/assessments/{assessment['id']}/preparation"
+    ).json()
+    assert initial["active_topic_count"] == 1
+    assert initial["preparation_coverage"] == 1.0
+
+    academic_source = post(
+        client,
+        "/academic-sources",
+        {"type": "SCHEDULE", "course_offering_id": offering["id"]},
+    )
+    proposal = post(
+        client,
+        "/extraction-proposals",
+        {
+            "academic_source_id": academic_source["id"],
+            "extracted_data": {
+                "units": [{"id": unit["id"], "action": "REMOVE"}]
+            },
+        },
+    )
+    assert client.post(
+        f"/extraction-proposals/{proposal['id']}/confirm"
+    ).status_code == 200
+
+    coverage = client.get(
+        f"/course-enrollments/{enrollment['id']}/assessments/{assessment['id']}/preparation"
+    ).json()
+    assert coverage["active_topic_count"] == 0
+    assert coverage["studied_topic_count"] == 0
+    assert coverage["preparation_coverage"] is None

@@ -55,10 +55,20 @@ class UserCourseService:
 
     def update(self, entity_id: int, **values):
         entity = self.get(entity_id)
+        study_plan_course_id = values.get(
+            "study_plan_course_id", entity.study_plan_course_id
+        )
+        if (
+            study_plan_course_id != entity.study_plan_course_id
+            and self.repository.has_enrollments(entity.id)
+        ):
+            raise EnrollmentConflictError(
+                "UserCourse with enrollments cannot change StudyPlanCourse"
+            )
         return self._save(
             entity,
             values.get("user_id", entity.user_id),
-            values.get("study_plan_course_id", entity.study_plan_course_id),
+            study_plan_course_id,
         )
 
     def delete(self, entity_id: int) -> None:
@@ -100,7 +110,18 @@ class CourseOfferingService:
         return self._save(None, values)
 
     def update(self, entity_id: int, **values):
-        return self._save(self.get(entity_id), values)
+        entity = self.get(entity_id)
+        study_plan_course_id = values.get(
+            "study_plan_course_id", entity.study_plan_course_id
+        )
+        if (
+            study_plan_course_id != entity.study_plan_course_id
+            and self.repository.has_enrollments(entity.id)
+        ):
+            raise EnrollmentConflictError(
+                "CourseOffering with enrollments cannot change StudyPlanCourse"
+            )
+        return self._save(entity, values)
 
     def delete(self, entity_id: int) -> None:
         delete(self.repository, self.get(entity_id), "CourseOffering")

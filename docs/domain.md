@@ -136,6 +136,12 @@ Its status is one of:
 
 `PENDING` identifies a source that has not yet been confirmed. `CONFIRMED` identifies a source accepted for use in the academic structure. `SUPERSEDED` identifies a source replaced by a later source without erasing its history.
 
+An `OTHER` source may belong to either a StudyPlan or a CourseOffering, with
+exactly one owner. In V0.1 it is reference or informational material only. It
+does not define a mapping into confirmed StudyPlan or CourseOffering structure,
+so an ExtractionProposal for an `OTHER` source cannot be confirmed. A failed
+confirmation leaves both the proposal and confirmed domain unchanged.
+
 ### 4.2 Confirmation flow
 
 Units, Topics, and Subtopics are not freely created or edited by Users. They must originate in provided academic sources and pass through this flow:
@@ -349,31 +355,51 @@ An Assessment may be associated with multiple Topics, and a Topic may be associa
 
 Metrics are derived from confirmed academic structure and EnrollmentTopic state. They must not be stored as independent sources of truth.
 
-The active Topic set is:
+The effective active Topic set is:
 
 ```text
-active_topics = topics where status != REMOVED
+effective_active_topics = topics where Topic.status == ACTIVE
+                          and Unit.status == ACTIVE
 ```
+
+A Topic under a removed Unit is therefore excluded even when the Topic row
+itself remains `ACTIVE`.
 
 Course progress is:
 
 ```text
-course_progress = SEEN / active_topics
+course_progress = SEEN effective active Topics / all effective active Topics
 ```
 
 Student progress is:
 
 ```text
-student_progress = STUDIED / active_topics
+student_progress = STUDIED effective active Topics / all effective active Topics
 ```
 
 Catch-up progress is:
 
 ```text
-catch_up_progress = SEEN_AND_STUDIED / all_SEEN
+catch_up_progress = SEEN_AND_STUDIED effective active Topics
+                    / all SEEN effective active Topics
 ```
 
-Only active Topics participate in the active-Topic denominator. Only `STUDIED` counts as completed for student progress.
+Academic gaps are:
+
+```text
+academic_gaps = effective active Topics where course_progress_status == SEEN
+                and student_status != STUDIED
+```
+
+Assessment preparation coverage is:
+
+```text
+assessment_preparation_coverage = STUDIED effective active assessment Topics
+                                  / all effective active assessment Topics
+```
+
+Only effective active Topics participate in these metrics. Only `STUDIED`
+counts as completed. A metric with a zero denominator returns `null`.
 
 ## 10. Domain invariants
 
@@ -386,6 +412,7 @@ Only active Topics participate in the active-Topic denominator. Only `STUDIED` c
 - Every Topic belongs to exactly one Unit.
 - Every Subtopic belongs to exactly one Topic.
 - Units and Topics marked `REMOVED` are preserved rather than physically deleted.
+- Topics under a `REMOVED` Unit are excluded from effective active Topic metrics.
 - Units, Topics, and Subtopics originate in supplied academic sources and require validation before confirmation.
 - AI never writes directly into the confirmed academic domain.
 - AI never invents Subtopics from general model knowledge.

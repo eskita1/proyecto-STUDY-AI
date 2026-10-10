@@ -224,6 +224,16 @@ def test_detailed_practice_uses_exercises_and_rejects_cross_offering(
         },
     )
     assert exercise["label"] == "Exercise 1"
+    not_evaluated = post(
+        client,
+        "/practice-exercises",
+        {
+            "practice_session_id": detailed["id"],
+            "label": "Exercise 2",
+            "result": "NOT_EVALUATED",
+        },
+    )
+    assert not_evaluated["result"] == "NOT_EVALUATED"
     post(
         client,
         "/practice-session-topics",

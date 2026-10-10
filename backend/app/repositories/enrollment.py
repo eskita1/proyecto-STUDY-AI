@@ -47,6 +47,14 @@ class UserCourseRepository:
             )
         )
 
+    def has_enrollments(self, entity_id: int) -> bool:
+        statement = (
+            select(CourseEnrollment.id)
+            .where(CourseEnrollment.user_course_id == entity_id)
+            .limit(1)
+        )
+        return self.session.scalar(statement) is not None
+
 
 class CourseOfferingRepository:
     def __init__(self, session: Session) -> None:
@@ -87,6 +95,14 @@ class CourseOfferingRepository:
         if exclude_id is not None:
             statement = statement.where(CourseOffering.id != exclude_id)
         return self.session.scalar(statement)
+
+    def has_enrollments(self, entity_id: int) -> bool:
+        statement = (
+            select(CourseEnrollment.id)
+            .where(CourseEnrollment.course_offering_id == entity_id)
+            .limit(1)
+        )
+        return self.session.scalar(statement) is not None
 
 
 class CourseEnrollmentRepository:

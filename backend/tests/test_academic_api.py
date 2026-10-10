@@ -1,5 +1,8 @@
 import os
 from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
+from threading import Event
 
 import pytest
 from alembic.config import Config
@@ -11,6 +14,12 @@ from sqlalchemy.orm import Session, sessionmaker
 from alembic import command
 from app.database.db import get_db
 from app.main import app
+from app.repositories.academic import (
+    AcademicSourceRepository,
+    AcademicStructureRepository,
+    ExtractionProposalRepository,
+)
+from app.services.academic import AcademicConflictError, ProposalService
 
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(
@@ -47,6 +56,20 @@ def client(factory) -> Generator[TestClient, None, None]:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+class PausingProposalRepository(ExtractionProposalRepository):
+    def __init__(self, session: Session, locked: Event, release: Event) -> None:
+        super().__init__(session)
+        self.locked = locked
+        self.release = release
+
+    def get_for_update(self, entity_id: int):
+        entity = super().get_for_update(entity_id)
+        self.locked.set()
+        if not self.release.wait(timeout=5):
+            raise RuntimeError("Timed out waiting to release proposal review")
+        return entity
 
 
 def post(client: TestClient, path: str, payload: dict | None = None) -> dict:
@@ -218,6 +241,117 @@ def test_source_ownership_rules(client: TestClient):
     )
 
 
+def test_other_sources_are_informational_and_cannot_confirm_structure(
+    client: TestClient,
+):
+    plan, offering = setup_offering(client)
+    initial_relations = client.get("/study-plan-courses").json()
+    sources = [
+        post(
+            client,
+            "/academic-sources",
+            {"type": "OTHER", "study_plan_id": plan["id"]},
+        ),
+        post(
+            client,
+            "/academic-sources",
+            {"type": "OTHER", "course_offering_id": offering["id"]},
+        ),
+    ]
+    payloads = [
+        {"courses": [{"action": "CREATE", "name": "Must Not Exist"}]},
+        structure_payload(),
+    ]
+
+    for academic_source, extracted_data in zip(sources, payloads, strict=True):
+        proposal = post(
+            client,
+            "/extraction-proposals",
+            {
+                "academic_source_id": academic_source["id"],
+                "extracted_data": extracted_data,
+            },
+        )
+        response = client.post(f"/extraction-proposals/{proposal['id']}/confirm")
+        assert response.status_code == 422
+        assert "informational" in response.json()["detail"]
+        assert client.get(f"/extraction-proposals/{proposal['id']}").json()[
+            "status"
+        ] == "PENDING"
+        assert client.get(f"/academic-sources/{academic_source['id']}").json()[
+            "status"
+        ] == "PENDING"
+
+    assert client.get("/study-plan-courses").json() == initial_relations
+    assert client.get(f"/course-offerings/{offering['id']}/units").json() == []
+
+
+@pytest.mark.parametrize(
+    ("first_action", "second_action", "expected_status", "expected_units"),
+    [
+        ("confirm", "confirm", "CONFIRMED", 1),
+        ("confirm", "reject", "CONFIRMED", 1),
+        ("reject", "confirm", "REJECTED", 0),
+    ],
+)
+def test_proposal_review_is_serialized(
+    client: TestClient,
+    factory,
+    first_action: str,
+    second_action: str,
+    expected_status: str,
+    expected_units: int,
+):
+    _, offering = setup_offering(client)
+    academic_source = source(client, offering["id"])
+    proposal = post(
+        client,
+        "/extraction-proposals",
+        {
+            "academic_source_id": academic_source["id"],
+            "extracted_data": structure_payload(),
+        },
+    )
+    locked = Event()
+    release = Event()
+    second_started = Event()
+
+    def review(action: str, pause_after_lock: bool):
+        with factory() as session:
+            proposal_repository = (
+                PausingProposalRepository(session, locked, release)
+                if pause_after_lock
+                else ExtractionProposalRepository(session)
+            )
+            service = ProposalService(
+                proposal_repository,
+                AcademicSourceRepository(session),
+                AcademicStructureRepository(session),
+            )
+            if not pause_after_lock:
+                second_started.set()
+            return getattr(service, action)(proposal["id"])
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(review, first_action, True)
+        assert locked.wait(timeout=5)
+        second = executor.submit(review, second_action, False)
+        assert second_started.wait(timeout=5)
+        with pytest.raises(FutureTimeoutError):
+            second.result(timeout=0.2)
+        release.set()
+        assert first.result(timeout=5).status == expected_status
+        with pytest.raises(AcademicConflictError):
+            second.result(timeout=5)
+
+    assert client.get(f"/extraction-proposals/{proposal['id']}").json()[
+        "status"
+    ] == expected_status
+    assert len(client.get(f"/course-offerings/{offering['id']}/units").json()) == (
+        expected_units
+    )
+
+
 def test_confirmation_creates_structure_and_provenance(client: TestClient):
     _, offering = setup_offering(client)
     academic_source = source(client, offering["id"])
@@ -328,7 +462,9 @@ def test_update_remove_and_offering_isolation(client: TestClient):
         client,
         "/extraction-proposals",
         {
-            "academic_source_id": source(client, offering["id"], "OTHER")["id"],
+            "academic_source_id": source(
+                client, offering["id"], "THEORETICAL_MATERIAL"
+            )["id"],
             "extracted_data": changes,
         },
     )
