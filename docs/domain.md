@@ -1,685 +1,414 @@
-# StudyAI — Domain
+# StudyAI Domain
 
-**Status:** Draft
+**Status:** V0.1 definition
 
-This document defines StudyAI's main domain concepts, their relationships, and the business rules that must be preserved.
+This document defines the domain concepts, relationships, states, and invariants for StudyAI V0.1. It does not define endpoints, database tables, or framework-specific implementation details.
 
-It does not define endpoints, tables, frameworks, or implementation details.
+## 1. Domain overview
 
----
+StudyAI separates four concerns:
 
-## 1. User
+1. institutional structure;
+2. the concrete academic delivery of a Course;
+3. the User's academic history and personal state;
+4. activity records used to derive study and practice information.
 
-`User` represents a person who uses StudyAI.
-
-The primary User is a University student.
-
-The model must remain open to other User types.
-
-Possible future examples:
-
-- student;
-- teacher;
-- administrator;
-- other academic roles.
-
-The domain must not assume that every `User` will always be exclusively a student.
-
----
-
-## 2. University
-
-`University` represents a University institution.
-
-Universities form a centralized academic catalog shared by all Users. The catalog
-must support institutions from any country; initial validation and testing focus
-on Argentine institutions without restricting the model to Argentina.
-
-A University has:
-
-- an automatically generated integer identifier;
-- a required name, stored with its original capitalization and normalized
-  whitespace;
-- a required uppercase ISO 3166-1 alpha-2 country code.
-
-University names must be unique within a country when compared without regard to
-case or trivial whitespace differences. Country-code validation in V0.1 verifies
-the two-letter format; maintaining a separate country registry is not required.
-
-Examples:
-
-- University of Buenos Aires;
-- National University of La Plata;
-- National Technological University.
-
-A University may contain multiple Faculties or academic units.
-
-Relationship:
+The core relationships are:
 
 ```text
-University
-    1
-    │
-    └─── *
-       Faculty
+University -> Faculty -> Career -> StudyPlan -> StudyPlanCourse
+                                         Course -> StudyPlanCourse
+
+StudyPlanCourse -> CourseOffering -> Unit -> Topic -> Subtopic
+
+User -> UserCareer
+User -> UserCourse -> CourseEnrollment -> EnrollmentTopic
 ```
 
----
+## 2. Institutional structure
 
-## 3. Faculty
+### 2.1 University
 
-`Faculty` represents a Faculty or academic unit belonging to a University.
+`University` represents an institution.
 
-A `Faculty` always belongs to a `University`.
+A University may contain multiple Faculties.
 
-A Faculty may offer multiple Careers.
+### 2.2 Faculty
 
-Relationship:
+`Faculty` represents a faculty or academic unit within a University.
 
-```text
-University
-    │
-    ▼
-Faculty
-    │
-    ▼
-Career
-```
+Every Faculty belongs to exactly one University. A Faculty may contain multiple Careers.
 
----
+### 2.3 Career
 
-## 4. Career
+`Career` represents a degree program.
 
-`Career` represents a University degree program.
+Every Career belongs to exactly one Faculty. A Career may have multiple StudyPlans.
 
-Examples:
-
-- Computer Engineering;
-- Civil Engineering;
-- Bachelor's Degree in Economics.
-
-A Career belongs to a Faculty.
-
-A Career may have multiple StudyPlans over time.
-
-Relationships:
-
-```text
-Faculty
-   1
-   │
-   └─── *
-      Career
-```
-
-and:
-
-```text
-Career
-   1
-   │
-   └─── *
-     StudyPlan
-```
-
----
-
-## 5. StudyPlan
+### 2.4 StudyPlan
 
 `StudyPlan` represents a specific version of a Career's curriculum.
 
-It must be identifiable through attributes such as:
+Every StudyPlan belongs to exactly one Career. A StudyPlan contains Courses through StudyPlanCourse relationships.
 
-- name;
-- year;
-- version.
+### 2.5 Course
 
-Examples:
-
-- Plan 2020;
-- Plan 2023;
-- Plan 2026.
-
-The same Career may have multiple StudyPlans.
-
-A StudyPlan belongs to exactly one Career.
-
----
-
-## 6. Course
-
-`Course` represents an academic Course as an independent concept.
-
-Examples:
-
-- Mathematical Analysis II;
-- Physics I;
-- Algorithms and Programming;
-- Databases.
-
-`Course` does not represent a User's academic state.
-
-Therefore, information such as:
-
-- approved;
-- active;
-- future;
-- `final_grade`;
-
-does NOT belong directly to `Course`.
+`Course` represents an abstract course concept. It does not identify a curriculum placement, chair, section, academic period, or individual student's state.
 
 The same Course may appear in multiple StudyPlans.
 
----
+### 2.6 StudyPlanCourse
 
-## 7. StudyPlanCourse
+`StudyPlanCourse` represents a Course inside one specific StudyPlan.
 
-`StudyPlanCourse` represents the occurrence of a Course within a specific StudyPlan.
+It is the curriculum-specific course concept from which concrete CourseOfferings are delivered.
 
-This concept must be distinguished from `Course` because the same Course may belong to different StudyPlans.
-
-This relationship may contain StudyPlan-specific information such as:
-
-- Course code;
-- recommended year;
-- recommended semester/term;
-- position within the StudyPlan;
-- other characteristics specific to that StudyPlan.
-
-Relationship:
+The institutional chain is:
 
 ```text
-StudyPlan
-    │
-    ▼
-StudyPlanCourse
-    │
-    ▼
-Course
+University -> Faculty -> Career -> StudyPlan -> StudyPlanCourse
 ```
 
-This allows:
+with each StudyPlanCourse referring to a Course.
+
+## 3. Concrete academic delivery
+
+### 3.1 CourseOffering
+
+`CourseOffering` represents the delivery of one StudyPlanCourse by a specific chair or section in a specific academic period or year.
+
+A CourseOffering belongs to exactly one StudyPlanCourse. Its confirmed academic structure contains Units, Topics, and Subtopics.
+
+Students share academic structure only when they belong to the same CourseOffering. Students enrolled in different CourseOfferings do not share confirmed academic structure merely because their offerings refer to the same StudyPlanCourse or Course.
+
+### 3.2 Unit
+
+`Unit` is a top-level content grouping within a CourseOffering.
+
+A Unit has one of these statuses:
+
+- `ACTIVE`
+- `REMOVED`
+
+`REMOVED` means the Unit is no longer part of the active confirmed structure. It must not be physically deleted.
+
+### 3.3 Topic
+
+`Topic` is a content item within a Unit.
+
+Every Topic belongs to exactly one Unit.
+
+A Topic has one of these statuses:
+
+- `ACTIVE`
+- `REMOVED`
+
+`REMOVED` means the Topic is no longer part of the active confirmed structure. It must not be physically deleted.
+
+### 3.4 Subtopic
+
+`Subtopic` is a finer-grained content item within a Topic.
+
+Every Subtopic belongs to exactly one Topic.
+
+A Subtopic may be created only from a source supplied by a User, chair, or University. AI must not invent a Subtopic from general model knowledge.
+
+## 4. Academic sources and confirmation
+
+### 4.1 AcademicSource
+
+`AcademicSource` represents material supplied as evidence for academic structure.
+
+Its type is one of:
+
+- `STUDY_PLAN`
+- `SYLLABUS`
+- `SCHEDULE`
+- `THEORETICAL_MATERIAL`
+- `PRACTICE_MATERIAL`
+- `OTHER`
+
+Its status is one of:
+
+- `PENDING`
+- `CONFIRMED`
+- `SUPERSEDED`
+
+`PENDING` identifies a source that has not yet been confirmed. `CONFIRMED` identifies a source accepted for use in the academic structure. `SUPERSEDED` identifies a source replaced by a later source without erasing its history.
+
+### 4.2 Confirmation flow
+
+Units, Topics, and Subtopics are not freely created or edited by Users. They must originate in provided academic sources and pass through this flow:
 
 ```text
-Course: Mathematical Analysis II
+source -> extraction -> proposed structure -> validation -> confirmed domain
 ```
 
-to appear in:
+The extracted or proposed structure is not the confirmed academic domain. Validation is the boundary at which proposed information may become confirmed.
+
+AI may assist with extraction and proposals. AI must never write directly into the confirmed academic domain.
+
+## 5. User academic relationships
+
+### 5.1 User
+
+`User` represents a person using StudyAI. The V0.1 User is a university student.
+
+### 5.2 UserCareer
+
+`UserCareer` represents the relationship between a User and a Career, including the StudyPlan applicable to that User's Career.
+
+A User may have more than one UserCareer.
+
+### 5.3 UserCourse
+
+`UserCourse` represents the historical relationship between a User and a StudyPlanCourse.
+
+It persists across concrete attempts. Attempt-specific status, final grade, Topic state, Study, and Practice do not belong directly to UserCourse.
+
+### 5.4 CourseEnrollment
+
+`CourseEnrollment` represents one concrete attempt or enrollment by a User in a CourseOffering.
+
+Conceptual fields:
+
+- `user_course_id`
+- `course_offering_id`
+- `status`
+- `final_grade`
+
+Its status is one of:
+
+- `IN_PROGRESS`
+- `PASSED`
+- `FAILED`
+
+`RETAKING` and `DROPPED` are not V0.1 statuses.
+
+The CourseEnrollment connects the User's historical UserCourse to the CourseOffering whose academic structure is shared for that attempt.
+
+### 5.5 EnrollmentTopic
+
+`EnrollmentTopic` represents a User's state for a Topic within one CourseEnrollment.
+
+Conceptual fields:
+
+- `course_enrollment_id`
+- `topic_id`
+- `course_progress_status`
+- `student_status`
+- `personal_note`
+
+`course_progress_status` is one of:
+
+- `NOT_SEEN`
+- `SEEN`
+
+`student_status` is one of:
+
+- `NOT_STARTED`
+- `IN_PROGRESS`
+- `STUDIED`
+
+The User manually controls both `course_progress_status` and `student_status`.
+
+StudyAI must not automatically change `student_status`. The User may move freely between student states, including backwards.
+
+`STUDIED` means that the User considers the Topic studied. It does not imply Practice or Mastery. Only `STUDIED` counts as completed for student-progress metrics.
+
+A scheduled date does not automatically change `course_progress_status` to `SEEN`.
+
+If the related Topic later becomes `REMOVED`, the EnrollmentTopic and its existing personal state must be preserved.
+
+## 6. Study activity
+
+### 6.1 StudySession
+
+`StudySession` records study activity for one CourseEnrollment.
+
+Conceptual fields:
+
+- `course_enrollment_id`
+- `started_at`
+- `ended_at`, nullable
+- `note`
+
+Two modes are supported:
+
+- quick mode, in which `ended_at` is absent;
+- full mode, in which both `started_at` and `ended_at` are present.
+
+Creating a StudySession must not automatically change any EnrollmentTopic `student_status`.
+
+### 6.2 StudySessionTopic
+
+`StudySessionTopic` associates a StudySession with a Topic studied during that session.
+
+A StudySession may be associated with multiple Topics, and a Topic may be associated with multiple StudySessions.
+
+### 6.3 Last studied time
+
+`last_studied_at` is derived from the latest related StudySession. It must not be stored as a redundant source of truth.
+
+## 7. Practice
+
+### 7.1 PracticeSession
+
+`PracticeSession` records Practice for one CourseEnrollment.
+
+Conceptual fields:
+
+- `course_enrollment_id`
+- `occurred_at`
+- `source_type`
+- `source_name`
+- `note`
+
+Practice is independent from course progress and personal study state. Creating or updating Practice must not automatically modify EnrollmentTopic `student_status`.
+
+### 7.2 PracticeSessionTopic
+
+`PracticeSessionTopic` associates a PracticeSession with a Topic practiced during that session.
+
+A PracticeSession may be associated with multiple Topics, and a Topic may be associated with multiple PracticeSessions.
+
+### 7.3 Quick mode
+
+Quick mode records aggregate counts:
+
+- `total_exercises`
+- `correct_exercises`
+- `partial_exercises`
+- `incorrect_exercises`
+
+### 7.4 Detailed mode
+
+Detailed mode records individual PracticeExercises.
+
+`PracticeExercise` has these conceptual fields:
+
+- `practice_session_id`
+- `label`
+- `result`
+
+The result is one of:
+
+- `CORRECT`
+- `PARTIALLY_CORRECT`
+- `INCORRECT`
+- `NOT_EVALUATED`
+
+### 7.5 Mastery boundary
+
+Practice does not imply Mastery. Mastery remains a separate concept and is outside V0.1.
+
+## 8. Time and assessments
+
+### 8.1 CourseScheduleItem
+
+`CourseScheduleItem` represents a planned academic date and ordering within a CourseOffering.
+
+Conceptual fields:
+
+- `course_offering_id`
+- `scheduled_date`
+- `unit_id`, optional
+- `topic_id`, optional
+- `position`
+
+A schedule date represents a plan, not a confirmed event. It must not automatically mark a Topic as `SEEN`.
+
+### 8.2 Assessment
+
+`Assessment` represents an assessment belonging to a CourseOffering.
+
+Conceptual fields:
+
+- `course_offering_id`
+- `name`
+- `type`
+- `date`
+- `description`
+
+Its type is one of:
+
+- `MIDTERM`
+- `FINAL`
+- `RECOVERY`
+- `ASSIGNMENT`
+- `QUIZ`
+- `OTHER`
+
+### 8.3 AssessmentTopic
+
+`AssessmentTopic` associates an Assessment with a Topic included in or relevant to that Assessment.
+
+An Assessment may be associated with multiple Topics, and a Topic may be associated with multiple Assessments.
+
+## 9. Derived metrics
+
+Metrics are derived from confirmed academic structure and EnrollmentTopic state. They must not be stored as independent sources of truth.
+
+The active Topic set is:
 
 ```text
-Plan 2020
-Plan 2023
-Plan 2026
+active_topics = topics where status != REMOVED
 ```
 
-without creating three conceptually different Courses.
-
----
-
-## 8. UserCareer
-
-`UserCareer` represents the relationship between a User and a Career.
-
-It is necessary because a User may be enrolled in more than one Career at the same time.
-
-Example:
+Course progress is:
 
 ```text
-User
- ├── Computer Engineering
- └── Bachelor's Degree in Mathematics
+course_progress = SEEN / active_topics
 ```
 
-Each relationship may be associated with a specific StudyPlan.
-
-Therefore, a User may simultaneously have:
+Student progress is:
 
 ```text
-Career A
-→ StudyPlan A
-
-Career B
-→ StudyPlan B
+student_progress = STUDIED / active_topics
 ```
 
-The model must not assume that a User can have only one Career.
-
----
-
-## 9. UserCourse
-
-`UserCourse` represents the academic relationship between a User and a Course.
-
-This concept contains information belonging to the student's personal academic history, not to the Course.
-
-For example:
-
-- CourseStatus;
-- `final_grade`;
-- future information related to the User's personal Course activity.
-
-Relationship:
+Catch-up progress is:
 
 ```text
-User
-   │
-   ▼
-UserCourse
-   │
-   ▼
-Course
+catch_up_progress = SEEN_AND_STUDIED / all_SEEN
 ```
 
----
-
-## 10. CourseStatus
-
-The `UserCourse` relationship may have one of these states:
-
-### approved
-
-A `UserCourse with status == approved` represents a Course the User took and passed.
-
-### active
-
-A `UserCourse with status == active` represents a Course the User is currently taking.
-
-### future
-
-A `UserCourse with status == future` represents a Course that belongs to the User's academic journey but has not yet been taken.
-
-CourseStatus belongs exclusively to `UserCourse`.
-
-For example:
-
-```text
-Course:
-Mathematical Analysis II
-```
-
-may be represented as:
-
-```text
-UserCourse for User A: status == approved
-UserCourse for User B: status == active
-UserCourse for User C: status == future
-```
-
-The Course itself has no CourseStatus.
-
----
-
-## 11. final_grade
-
-`final_grade` represents the definitive grade earned by the User in a Course.
-
-It belongs to `UserCourse`.
-
-### Invariant
-
-A `final_grade` may exist ONLY when:
-
-```text
-UserCourse.status == approved
-```
-
-Therefore:
-
-```text
-UserCourse with status == approved
-+ final_grade
-→ valid
-```
-
-but:
-
-```text
-UserCourse with status == active
-+ final_grade
-→ invalid
-```
-
-and:
-
-```text
-UserCourse with status == future
-+ final_grade
-→ invalid
-```
-
-The exact grading scale is not yet defined globally because it may vary between institutions.
-
----
-
-## 12. Assessment
-
-The domain must distinguish `final_grade` from grades earned during a Course.
-
-`Assessment` represents an evaluation instance.
-
-Examples:
-
-- midterm;
-- make-up exam;
-- practical assignment;
-- exam;
-- another evaluation instance.
-
-An Assessment may have:
-
-- date;
-- type;
-- result;
-- grade;
-- associated Course.
-
-Partial grades must belong to these instances and must not be confused with `final_grade`.
-
----
-
-## 13. Assessment timing rule
-
-A User cannot record a grade for an Assessment that has not yet occurred.
-
-If:
-
-```text
-assessment.date > current_date
-```
-
-then:
-
-```text
-assessment.grade
-```
-
-cannot exist yet.
-
-The Assessment itself may exist in advance to represent a future date.
-
-Valid example before the exam:
-
-```text
-Midterm 1
-Date: 10/17
-Grade: null
-```
-
-After the Assessment has occurred:
-
-```text
-Midterm 1
-Date: 10/17
-Grade: 8
-```
-
----
-
-## 14. Rules for UserCourse with status == future
-
-A `UserCourse with status == future` represents a Course the User has not yet taken.
-
-For this UserCourse:
-
-- `final_grade` cannot exist;
-- personal partial grades cannot exist;
-- completed Course activity cannot be recorded;
-- topics must not be loaded as part of the User's personal tracking.
-
-The system may know institutional information about the Course.
-
-For example:
-
-- name;
-- code;
-- StudyPlan position;
-- suggested year.
-
-But the User does not yet have active academic tracking for it.
-
----
-
-## 15. Topics
-
-`Topic` represents an academic topic belonging to Course content.
-
-Examples:
-
-```text
-Mathematical Analysis II
-├── Topology
-├── Partial derivatives
-├── Differentiability
-└── Implicit functions
-```
-
-Topics are a central part of the domain. Their implementation scope is defined by the applicable release document.
-
-### Initial rule
-
-Topic tracking must exist only for UserCourse relationships where the User has started taking the Course.
-
-A `UserCourse with status == future` must not contain personal Topic activity.
-
----
-
-## 16. CoursePace
-
-`CoursePace` represents how far a Course has currently advanced.
-
-Example:
-
-```text
-Course: Mathematical Analysis II
-
-Last topic covered:
-Implicit functions
-```
-
-It must not be confused with the User's personal Progress.
-
----
-
-## 17. Progress
-
-`Progress` represents the User's personal advancement through Course content.
-
-Initially, it is understood as exposure to and work on academic content.
-
-For example:
-
-- attended the lecture;
-- reviewed the content;
-- studied the theory.
-
-`Progress` does not mean Mastery.
-
-Its formal definition must be specified before implementing the corresponding version.
-
----
-
-## 18. Practice
-
-`Practice` represents the User's practical activity.
-
-In the future, it may consider:
-
-- completed exercises;
-- correct exercises;
-- incorrect exercises;
-- retries;
-- results;
-- comments;
-- difficulties.
-
-It must not be confused with theoretical Progress or Mastery.
-
----
-
-## 19. Mastery
-
-`Mastery` represents a User's level of consolidated understanding of a topic.
-
-It must consider the connection between:
-
-- theoretical understanding;
-- practical application.
-
-A User may have:
-
-```text
-high Progress
-+
-little Practice
-+
-low Mastery
-```
-
-These concepts must remain independent.
-
----
-
-## 20. Main relationships
-
-The initial conceptual model can be visualized as:
-
-```text
-University
-    │
-    ▼
-Faculty
-    │
-    ▼
-Career
-    │
-    ▼
-StudyPlan
-    │
-    ▼
-StudyPlanCourse
-    │
-    ▼
-Course
-```
-
-On the User side:
-
-```text
-User
- │
- ├── UserCareer
- │       │
- │       ├── Career
- │       └── StudyPlan
- │
- └── UserCourse
-         │
-         ├── Course
-         ├── CourseStatus
-         └── final_grade
-```
-
-Additional UserCourse relationships:
-
-```text
-UserCourse
-    │
-    ├── Assessments
-    ├── Topics
-    ├── Progress
-    ├── Practice
-    └── Mastery
-```
-
----
-
-## 21. Initial invariants
-
-The following rules must be treated as domain invariants:
-
-### Academic structure
-
-- a `Faculty` belongs to a `University`;
-- a `Career` belongs to a `Faculty`;
-- a `StudyPlan` belongs to a `Career`;
-- a Course may appear in multiple StudyPlans;
-- a User may be associated with multiple Careers;
-- each UserCareer may use a different StudyPlan.
-
-### UserCourse state
-
-- CourseStatus belongs to `UserCourse`, not to `Course`;
-- `final_grade` belongs to `UserCourse`, not to `Course`;
-- a `final_grade` may exist only for a `UserCourse with status == approved`;
-- a `UserCourse with status == future` cannot have a `final_grade`;
-- a `UserCourse with status == future` cannot have personal partial grades;
-- a `UserCourse with status == future` cannot record personal academic activity.
-
-### Assessments
-
-- a future Assessment may exist;
-- a grade for a future Assessment cannot exist until the Assessment has occurred.
-
-### Topic tracking by UserCourse status
-
-- topics belong to UserCourse tracking where the User has started taking the Course;
-- a `UserCourse with status == future` must not have personal Topic tracking.
-
----
-
-## 22. Separation between institutional and personal information
-
-A central domain distinction is between:
-
-### Institutional information
-
-Describes the academic system.
-
-Examples:
-
-- University;
-- Faculty;
-- Career;
-- StudyPlan;
-- Courses;
-- codes;
-- StudyPlan position.
-
-### User information
-
-Describes the User's relationship with that academic system.
-
-Examples:
-
-- enrolled Career;
-- selected StudyPlan;
-- CourseStatus;
-- `final_grade`;
-- Assessments;
-- Progress;
-- Practice;
-- Mastery.
-
-This separation must be preserved in future domain decisions.
-
----
-
-## 23. Open questions
-
-The following domain decisions remain open:
-
-- global grade format;
-- exact Assessment modeling;
-- formal definition of Topic;
-- Progress calculation;
-- Practice calculation;
-- Mastery calculation;
-- formal representation of CoursePace;
-- Course prerequisites;
-- elective Courses;
-- Course equivalencies;
-- StudyPlan changes;
-- Career changes;
-- Courses shared between Careers.
-
-These decisions must be resolved when the corresponding scope requires them.
+Only active Topics participate in the active-Topic denominator. Only `STUDIED` counts as completed for student progress.
+
+## 10. Domain invariants
+
+- Every Faculty belongs to exactly one University.
+- Every Career belongs to exactly one Faculty.
+- Every StudyPlan belongs to exactly one Career.
+- StudyPlanCourse, not Course, represents a Course's placement in a StudyPlan.
+- Every CourseOffering belongs to one StudyPlanCourse and identifies a specific chair or section and academic period or year.
+- Students share academic structure only within the same CourseOffering.
+- Every Topic belongs to exactly one Unit.
+- Every Subtopic belongs to exactly one Topic.
+- Units and Topics marked `REMOVED` are preserved rather than physically deleted.
+- Units, Topics, and Subtopics originate in supplied academic sources and require validation before confirmation.
+- AI never writes directly into the confirmed academic domain.
+- AI never invents Subtopics from general model knowledge.
+- UserCourse is historical; CourseEnrollment represents one concrete attempt.
+- CourseEnrollment status is limited to `IN_PROGRESS`, `PASSED`, and `FAILED` in V0.1.
+- The User manually controls actual course progress and personal study state.
+- StudyAI never automatically changes `student_status`.
+- The User may move freely between student states, including backwards.
+- `STUDIED` does not imply Practice or Mastery.
+- StudySessions and PracticeSessions never automatically change `student_status`.
+- Schedule dates are plans and never automatically mark Topics as `SEEN`.
+- Removing a Topic never discards existing personal state.
+- `last_studied_at` and progress metrics are derived, not separately stored sources of truth.
+- Practice and Progress are independent.
+- Mastery is outside V0.1.
+
+## 11. Out-of-scope states and concepts
+
+The following are explicitly outside V0.1:
+
+- `RETAKING` as a CourseEnrollment status;
+- `DROPPED` as a CourseEnrollment status;
+- Mastery;
+- automatic state transitions based on schedules, StudySessions, or PracticeSessions;
+- AI-generated confirmed academic structure without validation;
+- Subtopics invented from general model knowledge.
