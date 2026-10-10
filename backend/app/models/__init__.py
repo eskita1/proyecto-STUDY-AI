@@ -15,15 +15,19 @@ from app.models.institutional import (
     User,
     UserCareer,
 )
+from app.models.planning import Assessment, AssessmentTopic, CourseScheduleItem
 from app.models.tracking import EnrollmentTopic
 from app.models.university import University
 
 __all__ = [
     "AcademicSource",
+    "Assessment",
+    "AssessmentTopic",
     "Career",
     "Course",
     "CourseEnrollment",
     "CourseOffering",
+    "CourseScheduleItem",
     "EnrollmentTopic",
     "ExtractionProposal",
     "Faculty",
